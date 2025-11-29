@@ -45,8 +45,8 @@ SYSTEM INSTRUCTION:
 ${systemPrompt}
 
 Your reply MUST follow these rules:
-- Keep it short (1–3 sentences max)
-- Do NOT greet again (no “Hello I’m Buzzo”)
+- Keep it short (2-5 sentences max)
+- Do greet  (no “Hello I’m Buzzo and some introduction”)
 - Be direct and concise
 - No long paragraphs, no marketing tone
 
