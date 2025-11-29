@@ -5,10 +5,11 @@ import ChatMessage from "./components/ChatMessage";
 import { companyInfo } from "./companyInfo";
 
 const App = () => {
+  // System instruction stored inside history BUT hidden
   const [chatHistory, setChatHistory] = useState([
     {
       hideInChat: true,
-      role: "model",
+      role: "system",
       text: companyInfo,
     },
   ]);
@@ -16,7 +17,7 @@ const App = () => {
   const [showChatbot, setShowChatbot] = useState(false);
   const chatBodyRef = useRef();
 
-  // ---------------- BOT RESPONSE ----------------
+  // ---------------- BOT RESPONSE (FIXED MEMORY) ----------------
   const generateBotResponse = async (history) => {
     const updateHistory = (text, isError = false) => {
       setChatHistory((prev) => [
@@ -25,55 +26,59 @@ const App = () => {
       ]);
     };
 
-    const formatted = history.map(({ role, text }) => ({
-      role,
-      parts: [{ text }],
-    }));
+    // EXTRACT THE SYSTEM INSTRUCTION
+    const systemPrompt = history.find((msg) => msg.hideInChat)?.text || "";
+
+    // BUILD FULL CHAT CONTEXT (excluding system instruction)
+    const conversation = history
+      .filter((msg) => !msg.hideInChat)
+      .map((msg) => ({
+        role: msg.role,
+        text: msg.text,
+      }));
+
+    // ADD LATEST USER MESSAGE
+    const latestUserMessage = history[history.length - 1].text;
+
+const finalPrompt = `
+SYSTEM INSTRUCTION:
+${systemPrompt}
+
+Your reply MUST follow these rules:
+- Keep it short (1–3 sentences max)
+- Do NOT greet again (no “Hello I’m Buzzo”)
+- Be direct and concise
+- No long paragraphs, no marketing tone
+
+CONVERSATION SO FAR:
+${conversation
+  .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
+  .join("\n")}
+
+LATEST USER MESSAGE:
+${latestUserMessage}
+
+Respond concisely as Buzzo.
+`;
+
 
     try {
-      const backend =
-        import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+      const backend = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
       const res = await fetch(`${backend}/api/gemini`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: formatted }),
+        body: JSON.stringify({ message: finalPrompt }),
       });
 
-      const data = await res.json().catch(() => null);
+      const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data?.error || "Server error");
-      }
+      if (!res.ok) throw new Error(data?.error || "Server error");
 
-      // -----------------------------------------------------
-      //      UNIVERSAL TEXT EXTRACTOR (fix [object Object])
-      // -----------------------------------------------------
-      function extractText(d) {
-        let text = "";
+      // Extract clean text
+      const parts = data?.candidates?.[0]?.content?.parts;
+      const cleanedText = parts?.map((p) => p.text).join("\n") || "No response";
 
-        try {
-          const parts = d?.candidates?.[0]?.content?.parts;
-
-          if (Array.isArray(parts)) {
-            text = parts
-              .map((p) => {
-                if (typeof p.text === "string") return p.text;
-                if (typeof p.text === "object")
-                  return JSON.stringify(p.text, null, 2);
-                return "";
-              })
-              .join("\n");
-          }
-        } catch {
-          text = "";
-        }
-
-        if (!text) text = "No response";
-        return text.trim();
-      }
-
-      const cleanedText = extractText(data);
       updateHistory(cleanedText);
     } catch (err) {
       updateHistory(err.message, true);
@@ -105,7 +110,6 @@ const App = () => {
             <ChatbotIcon />
             <h2 className="logo-text">Chatbot</h2>
           </div>
-
           <button
             onClick={() => setShowChatbot((p) => !p)}
             className="material-symbols-rounded"
@@ -123,9 +127,12 @@ const App = () => {
             </p>
           </div>
 
-          {chatHistory.map((chat, index) => (
-            <ChatMessage key={index} chat={chat} />
-          ))}
+          {/* Render only messages NOT hidden */}
+          {chatHistory
+            .filter((msg) => !msg.hideInChat)
+            .map((chat, index) => (
+              <ChatMessage key={index} chat={chat} />
+            ))}
         </div>
 
         {/* Footer */}

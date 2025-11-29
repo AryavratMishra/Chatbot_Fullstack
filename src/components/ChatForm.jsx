@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 
 const ChatForm = ({ chatHistory, setChatHistory, generateBotResponse }) => {
   const inputRef = useRef();
+  const hasCalledRef = useRef(false);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -9,18 +10,23 @@ const ChatForm = ({ chatHistory, setChatHistory, generateBotResponse }) => {
     if (!userMessage) return;
     inputRef.current.value = "";
 
-    // Add user message to history, then add Thinking... and call generator with fresh history
-    setChatHistory((prev) => {
-      const withUser = [...prev, { role: "user", text: userMessage }];
-      // add Thinking placeholder and call generator with that latest history
-      const withThinking = [...withUser, { role: "model", text: "Thinking..." }];
-
-      // call backend using freshest history
-      generateBotResponse(withThinking);
-
-      return withThinking;
-    });
+    // Just add user message and thinking placeholder - don't call API yet
+    setChatHistory((prev) => [
+      ...prev,
+      { role: "user", text: userMessage },
+      { role: "model", text: "Thinking..." },
+    ]);
+    hasCalledRef.current = false;
   };
+
+  // Call API only when "Thinking..." appears, and only once
+  useEffect(() => {
+    const lastMsg = chatHistory[chatHistory.length - 1];
+    if (lastMsg?.text === "Thinking..." && !hasCalledRef.current) {
+      hasCalledRef.current = true;
+      generateBotResponse(chatHistory);
+    }
+  }, [chatHistory, generateBotResponse]);
 
   return (
     <form className="chat-form" onSubmit={handleFormSubmit}>
@@ -37,3 +43,4 @@ const ChatForm = ({ chatHistory, setChatHistory, generateBotResponse }) => {
 };
 
 export default ChatForm;
+
